@@ -16,6 +16,8 @@ type ItemSummary = {
   condition: string;
   free_shipping: boolean;
   installments: string;
+  seller: string;
+  is_refurbished?: boolean; 
 };
 
 type ItemDetail = {
@@ -45,23 +47,32 @@ export const fetchItems = (query: string, offset: number = 0): { categories: str
     rawData.filters?.find((f: any) => f.id === 'category')?.values[0]?.path_from_root.map((cat: any) => cat.name) ||
     [];
 
-  const items: ItemSummary[] = rawData.results.map((item: any) => ({
-    id: item.id,
-    title: item.title,
-    price: {
-      currency: item.currency_id,
-      amount: Math.floor(item.price),
-      decimals: parseInt((item.price % 1).toFixed(2).split('.')[1]),
-      regular_amount: item.original_price || null,
-    },
-    picture: item.thumbnail,
-    condition: item.condition,
-    free_shipping: item.shipping?.free_shipping || false,
-    installments: `${item.installments?.quantity} cuotas`,
-  }));
+  const items: ItemSummary[] = rawData.results.map((item: any) => {
+    const isRefurbished = item.attributes?.some(
+      (attr: any) => attr.value_name?.toLowerCase() === "reacondicionado"
+    );
+
+    return {
+      id: item.id,
+      title: item.title,
+      price: {
+        currency: item.currency_id,
+        amount: Math.floor(item.price),
+        decimals: parseInt((item.price % 1).toFixed(2).split('.')[1]),
+        regular_amount: item.original_price || null,
+      },
+      picture: item.thumbnail,
+      condition: item.condition,
+      free_shipping: item.shipping?.free_shipping || false,
+      installments: `${item.installments?.quantity} cuotas`,
+      seller: item.seller?.nickname || "Desconocido",
+      is_refurbished: isRefurbished, 
+    };
+  });
 
   return { categories, items };
 };
+
 
 export const fetchItemDetail = (id: string): { item: ItemDetail } => {
   const itemPath = path.join(__dirname, '../../mocks/items', `${id}.json`);
