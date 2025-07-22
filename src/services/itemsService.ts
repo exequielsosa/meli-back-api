@@ -1,7 +1,7 @@
 import path from "path";
 import fs from "fs";
 import { readJSON, itemExists } from "../utils/file";
-import { normalize } from "../utils/normailize";
+import { normalize } from "../utils/normalize";
 import { formatPrice } from "../utils/price";
 import {ItemSummary, ItemDetail} from "../types/itemsServiceTypes";
 
@@ -154,6 +154,10 @@ export const fetchItemDetail = (id: string): { item: ItemDetail } => {
 
   const { amount, decimals } = formatPrice(priceAmount);
 
+  const warranty =
+    item.sale_terms?.find((term: any) => term.id === "WARRANTY_TYPE")
+      ?.value_name || null;
+
   return {
     item: {
       id: item.id,
@@ -179,6 +183,8 @@ export const fetchItemDetail = (id: string): { item: ItemDetail } => {
       })),
       category_path_from_root: category.path_from_root.map((cat: any) => cat.name),
       seller: sellerName,
-    }
+      warranty,
+    },
   };
 };
+

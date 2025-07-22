@@ -30,4 +30,5 @@ export type ItemDetail = {
   attributes: { id: string; name: string; value_name: string }[];
   category_path_from_root: string[];
   seller?: string;
+   warranty?: string | null;
 };
