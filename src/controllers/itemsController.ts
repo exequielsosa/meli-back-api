@@ -13,6 +13,7 @@ export const getItems = (req: Request, res: Response): void => {
     const data = fetchItems(q, Number(offset) || 0);
     res.json(data);
   } catch (error) {
+    console.error('[getItems] Error:', error);
     res.status(500).json({ error: 'Failed to fetch items' });
   }
 };
@@ -24,6 +25,7 @@ export const getItemById = (req: Request, res: Response): void => {
     const data = fetchItemDetail(id);
     res.json(data);
   } catch (error) {
+    console.error(`[getItemById] Error fetching ID ${id}:`, error);
     res.status(500).json({ error: 'Failed to fetch item detail' });
   }
 };
