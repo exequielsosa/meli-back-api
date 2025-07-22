@@ -1,52 +1,9 @@
 import path from "path";
 import fs from "fs";
-
-type Price = {
-  currency: string;
-  amount: number;
-  decimals: number;
-  regular_amount: number | null;
-};
-
-type ItemSummary = {
-  id: string;
-  title: string;
-  price: Price;
-  picture: string;
-  condition: string;
-  free_shipping: boolean;
-  installments: string;
-  seller: string;
-  is_refurbished?: boolean;
-};
-
-type ItemDetail = {
-  id: string;
-  title: string;
-  price: Price;
-  pictures: string[];
-  condition: string;
-  free_shipping: boolean;
-  sold_quantity: number;
-  installments: string;
-  description: string;
-  attributes: { id: string; name: string; value_name: string }[];
-  category_path_from_root: string[];
-  seller?: String;
-};
-
-const readJSON = (filePath: string): any => {
-  const data = fs.readFileSync(filePath, "utf-8");
-  return JSON.parse(data);
-};
-
-const normalize = (str: string | null | undefined = ""): string =>
-  (str ?? "").toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-
-const itemExists = (id: string): boolean => {
-  const itemPath = path.join(__dirname, "../../mocks/items", `${id}.json`);
-  return fs.existsSync(itemPath);
-};
+import { readJSON, itemExists } from "../utils/file";
+import { normalize } from "../utils/normailize";
+import { formatPrice } from "../utils/price";
+import {ItemSummary, ItemDetail} from "../types/itemsServiceTypes";
 
 export const fetchItems = (
   query: string,
@@ -62,8 +19,7 @@ export const fetchItems = (
   let allResults: any[] = [];
 
   for (const file of files) {
-    const filePath = path.join(folderPath, file);
-    const data = readJSON(filePath);
+    const data = readJSON(path.join(folderPath, file));
 
     if (Array.isArray(data.results)) {
       data.results.forEach((item: any) => {
@@ -111,7 +67,6 @@ export const fetchItems = (
   });
 
   const resultsToUse = filtered.length > 0 ? filtered : allResults;
-
   const resultsWithDetail = resultsToUse.filter((item) => itemExists(item.id));
 
   const mappedItems: ItemSummary[] = resultsWithDetail.map((item: any) => {
@@ -119,32 +74,28 @@ export const fetchItems = (
       (attr: any) => normalize(attr.value_name) === "reacondicionado"
     );
 
-    const rawPrice = typeof item.price === "number" ? Number(item.price.toFixed(2)) : 0;
-    const decimals = parseInt((rawPrice % 1).toFixed(2).split(".")[1]);
+    const { amount, decimals } = formatPrice(item.price ?? 0);
+    const regularAmount = item.original_price
+      ? formatPrice(item.original_price).amount
+      : null;
 
-    let sellerName = "Desconocido";
-    if (item.official_store_name) {
-      sellerName = item.official_store_name;
-    } else if (item.seller?.nickname) {
-      sellerName = item.seller.nickname;
-    }
+    const seller =
+      item.official_store_name || item.seller?.nickname || "Desconocido";
 
     return {
       id: item.id,
       title: item.title || "Sin título",
       price: {
         currency: item.currency_id || "ARS",
-        amount: rawPrice,
+        amount,
         decimals,
-        regular_amount: item.original_price
-          ? Number(item.original_price.toFixed(2))
-          : null,
+        regular_amount: regularAmount,
       },
       picture: item.thumbnail || "",
       condition: item.condition || "unknown",
       free_shipping: item.shipping?.free_shipping || false,
       installments: `${item.installments?.quantity || 1}`,
-      seller: sellerName,
+      seller,
       is_refurbished: isRefurbished,
     };
   });
@@ -154,8 +105,6 @@ export const fetchItems = (
     items: mappedItems.slice(offset, offset + 50),
   };
 };
-
-
 
 export const fetchItemDetail = (id: string): { item: ItemDetail } => {
   const itemPath = path.join(__dirname, "../../mocks/items", `${id}.json`);
@@ -169,16 +118,14 @@ export const fetchItemDetail = (id: string): { item: ItemDetail } => {
   const searchFolder = path.join(__dirname, "../../mocks/search");
   const searchFiles = fs.readdirSync(searchFolder);
 
-  let installmentsText = "1 cuota";
+  let installmentsText = "1";
   let sellerName = "Desconocido";
   let soldQuantity = item.sold_quantity ?? 0;
-
   let priceAmount = item.price;
   let regularAmount = item.original_price || null;
 
   for (const file of searchFiles) {
-    const filePath = path.join(searchFolder, file);
-    const data = readJSON(filePath);
+    const data = readJSON(path.join(searchFolder, file));
     const result = data.results.find((entry: any) => entry.id === id);
 
     if (result) {
@@ -186,57 +133,52 @@ export const fetchItemDetail = (id: string): { item: ItemDetail } => {
         installmentsText = `${result.installments.quantity}`;
       }
 
-      if (result.official_store_name) {
-        sellerName = result.official_store_name;
-      } else if (result.seller?.nickname) {
-        sellerName = result.seller.nickname;
-      }
+      sellerName =
+        result.official_store_name || result.seller?.nickname || sellerName;
 
       if (typeof result.sold_quantity === "number") {
         soldQuantity = result.sold_quantity;
       }
 
-      // Tomar precio desde search
       if (typeof result.price === "number") {
-        priceAmount = Number(result.price.toFixed(2));
+        priceAmount = result.price;
       }
 
       if (typeof result.original_price === "number") {
-        regularAmount = Number(result.original_price.toFixed(2));
+        regularAmount = result.original_price;
       }
 
       break;
     }
   }
 
-  const amount = Number(priceAmount.toFixed(2));
-  const decimals = Number((amount % 1).toFixed(2).split(".")[1]);
+  const { amount, decimals } = formatPrice(priceAmount);
 
-  const detail: ItemDetail = {
-    id: item.id,
-    title: item.title,
-    price: {
-      currency: item.currency_id,
-      amount,
-      decimals,
-      regular_amount: regularAmount,
-    },
-    pictures: item.pictures.map((pic: any) => pic.url),
-    condition: item.condition,
-    free_shipping: item.shipping?.free_shipping || false,
-    sold_quantity: soldQuantity,
-    installments: installmentsText,
-    description: description.plain_text,
-    attributes: item.attributes.map((attr: any) => ({
-      id: attr.id,
-      name: attr.name,
-      value_name: attr.value_name,
-    })),
-    category_path_from_root: category.path_from_root.map((cat: any) => cat.name),
-    seller: sellerName,
+  return {
+    item: {
+      id: item.id,
+      title: item.title,
+      price: {
+        currency: item.currency_id,
+        amount,
+        decimals,
+        regular_amount: regularAmount
+          ? formatPrice(regularAmount).amount
+          : null,
+      },
+      pictures: item.pictures.map((pic: any) => pic.url),
+      condition: item.condition,
+      free_shipping: item.shipping?.free_shipping || false,
+      sold_quantity: soldQuantity,
+      installments: installmentsText,
+      description: description.plain_text,
+      attributes: item.attributes.map((attr: any) => ({
+        id: attr.id,
+        name: attr.name,
+        value_name: attr.value_name,
+      })),
+      category_path_from_root: category.path_from_root.map((cat: any) => cat.name),
+      seller: sellerName,
+    }
   };
-
-  return { item: detail };
 };
-
-
